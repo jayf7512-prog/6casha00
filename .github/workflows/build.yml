@@ -20,6 +20,15 @@ jobs:
           cp -r extraction_folder/* ./ || true
           rm -rf extraction_folder/
 
+      - name: Fix Double Folder Xcode Paths
+        run: |
+          # If a double nested folder exists, flatten it automatically
+          if [ -d "Cash App.xcodeproj/Cash App.xcodeproj" ]; then
+            echo "Fixing double nested Xcode folder structure..."
+            mv "Cash App.xcodeproj/Cash App.xcodeproj/"* "Cash App.xcodeproj/" || true
+            rm -rf "Cash App.xcodeproj/Cash App.xcodeproj"
+          fi
+
       - name: Locate Xcode Project Dynamically
         id: locate
         run: |
