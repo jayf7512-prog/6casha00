@@ -1,0 +1,59 @@
+name: Build IPA via Folder Zip File
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Extract Project Zip From Folder
+        run: |
+          echo "Unzipping your files..."
+          unzip CashappSpoof/CashAppReady.zip -d extraction_folder/
+          
+          # Move files to workspace root where Xcode expects them
+          cp -r extraction_folder/* ./ || true
+          rm -rf extraction_folder/
+
+      - name: Locate Xcode Project Dynamically
+        id: locate
+        run: |
+          XCODEPROJ_PATH=$(find . -name "*.xcodeproj" | head -n 1)
+          if [ -z "$XCODEPROJ_PATH" ]; then
+            echo "::error::Could not find your unzipped .xcodeproj folder! Verify its name inside the zip."
+            exit 1
+          fi
+          echo "PROJECT_FILE=$(basename "$XCODEPROJ_PATH")" >> $GITHUB_ENV
+          echo "PROJECT_NAME=$(basename "$XCODEPROJ_PATH" .xcodeproj)" >> $GITHUB_ENV
+
+      - name: Find Scheme Dynamically
+        run: |
+          SCHEME=$(xcodebuild -list -project "${{ env.PROJECT_FILE }}" | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | sed 's/^[ \t]*//' | head -n 1)
+          echo "SCHEME=$SCHEME" >> $GITHUB_ENV
+
+      - name: Compile Swift Code
+        run: |
+          xcodebuild archive \
+            -project "${{ env.PROJECT_FILE }}" \
+            -scheme "${{ env.SCHEME }}" \
+            -archivePath build/AppArchive.xcarchive \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
+
+      - name: Package into IPA
+        run: |
+          mkdir -p build/Payload
+          cp -r build/AppArchive.xcarchive/Products/Applications/*.app build/Payload/
+          zip -r "${{ env.PROJECT_NAME }}.ipa" Payload/
+
+      - name: Upload IPA to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-ipa-for-esign
+          path: ${{ env.PROJECT_NAME }}.ipa
